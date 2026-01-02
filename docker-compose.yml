@@ -1,0 +1,68 @@
+# Docker Compose for Utils.Bot
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ticketbot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ticketbot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ticketbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ticketbot-network
+
+  # Backend (Bot + API)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ticketbot-backend
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://ticketbot:${DB_PASSWORD:-changeme}@postgres:5432/ticketbot?schema=public
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      PORT: 3001
+      NODE_ENV: production
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/transcripts:/app/transcripts
+    networks:
+      - ticketbot-network
+
+  # Frontend (Dashboard)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ticketbot-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:3001
+      NEXT_PUBLIC_GUILD_ID: ${DISCORD_GUILD_ID}
+    ports:
+      - "3000:3000"
+    networks:
+      - ticketbot-network
+
+volumes:
+  postgres_data:
+
+networks:
+  ticketbot-network:
+    driver: bridge
